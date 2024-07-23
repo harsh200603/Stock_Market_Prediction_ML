@@ -1,0 +1,62 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import yfinance as yf
+from sklearn.preprocessing import MinMaxScaler
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+# Load the pre-trained model
+model = load_model('stock_price_model.h5')  # Update with the path to your saved model
+
+# Define function to fetch stock data
+def fetch_stock_data(ticker, start_date, end_date):
+    stock_data = yf.download(ticker, start=start_date, end=end_date)
+    return stock_data
+
+# Define function to make prediction
+def predict_future_price(model, data, future_date):
+    # Preprocess data similarly as during training
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(data)
+    
+    # Prepare the data for prediction
+    last_60_days = scaled_data[-60:]
+    x_input = np.array(last_60_days)
+    x_input = np.reshape(x_input, (1, x_input.shape[0], 1))
+    
+    # Make prediction
+    predicted_price = model.predict(x_input)
+    predicted_price = scaler.inverse_transform(predicted_price)
+    
+    return predicted_price[0][0]
+
+# Add a new section for future stock price prediction
+st.title('Future Stock Price Prediction')
+
+# Input for stock ticker
+ticker = st.text_input('Enter Stock Ticker for Prediction', 'AAPL')
+
+# Input for prediction date
+pred_date = st.date_input('Enter Date for Prediction', datetime.today() + timedelta(days=1))
+
+# Fetch stock data
+end_date = datetime.today()
+start_date = end_date - timedelta(days=365*5)
+stock_data = fetch_stock_data(ticker, start_date, end_date)
+
+# Display the stock data
+st.subheader(f'{ticker} Stock Data')
+st.write(stock_data.tail(10))
+
+# Predict future price
+if st.button('Predict Future Price'):
+    future_date = pd.to_datetime(pred_date)
+    last_available_date = stock_data.index[-1]
+    
+    if future_date <= last_available_date:
+        st.error('Please enter a future date.')
+    else:
+        predicted_price = predict_future_price(model, stock_data['Close'].values, future_date)
+        st.subheader(f'Predicted Stock Price on {future_date.strftime("%Y-%m-%d")}: ${predicted_price:.2f}')
